@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CEPK Adventure - Colégio Presidente Kennedy</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a2e12;font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;color:#fff;overflow:hidden}
+  h1{font-size:28px;margin:10px;text-shadow:2px 2px 0 #000}
+  #wrap{position:relative;width:960px;max-width:100vw}
+  canvas{width:100%;background:#7ec8f7;display:block;border:4px solid #00c853;border-radius:12px}
+  #hud{display:flex;justify-content:space-between;padding:8px 4px;font-weight:bold;font-size:18px;text-shadow:1px 1px 0 #000}
+  .btns{display:flex;gap:10px;margin:10px}
+  button{padding:12px 24px;font-size:18px;font-weight:900;border:0;border-radius:30px;background:#00e676;color:#00200d;cursor:pointer;box-shadow:0 4px 0 #007a33}
+  button:active{transform:translateY(3px);box-shadow:none}
+  #mobile{display:none;gap:10px;margin-bottom:12px}
+  #mobile button{width:64px;height:56px;font-size:20px}
+  @media (pointer:coarse){#mobile{display:flex}}
+  p{font-size:13px;opacity:.9;text-align:center;padding:4px}
+</style>
+</head>
+<body>
+<h1>🐺 CEPK ADVENTURE 🟢 Colégio Estadual Presidente Kennedy</h1>
+<div id="wrap">
+  <div id="hud"><span>⭐ Livros: <span id="score">0</span>/10</span><span>❤️ Vidas: <span id="lives">3</span></span><span>🏁 FASE 1</span></div>
+  <canvas id="game" width="960" height="540"></canvas>
+</div>
+<div class="btns">
+  <button id="startBtn">▶ JOGAR</button>
+  <button id="howBtn">❓ COMO JOGAR</button>
+</div>
+<div id="mobile">
+  <button id="bLeft">◀</button><button id="bRight">▶</button><button id="bJump">⬆ PULAR</button>
+</div>
+<p>Setas / A,D para andar • Espaço / ↑ / W para pular • Colete os livros e desvie das provas! • Inspirado no seu mascote CEPK</p>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d');
+let state='menu',score=0,lives=3,keys={},camX=0,msg='';
+let player={x:60,y:400,w:42,h:52,vx:0,vy:0,ground:false,face:1,anim:0};
+let platforms=[
+ {x:0,y:500,w:400,h:40},{x:450,y:500,w:300,h:40},{x:800,y:500,w:500,h:40},
+ {x:200,y:410,w:140,h:20},{x:450,y:390,w:140,h:20},{x:700,y:400,w:140,h:20},
+ {x:950,y:380,w:160,h:20},{x:1200,y:400,w:160,h:20},{x:1000,y:300,w:140,h:20},{x:1400,y:500,w:600,h:40}
+];
+let books=[],enemies=[],goal={x:1900,y:420,w:50,h:80};
+for(let i=0;i<10;i++) books.push({x:230+i*170,y:360-((i%3)*25),w:30,h:30,got:false});
+for(let i=0;i<5;i++) enemies.push({x:500+i*300,y:465,w:36,h:35,vx:1.2,min:450+i*300,max:680+i*300});
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if([' ','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();if(e.key==='Enter'&&state!=='play')start();});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function bind(id,k){let b=document.getElementById(id);b.onpointerdown=()=>keys[k]=true;b.onpointerup=b.onpointerleave=()=>keys[k]=false;}
+bind('bLeft','ArrowLeft');bind('bRight','ArrowRight');bind('bJump',' ');
+document.getElementById('startBtn').onclick=start;
+document.getElementById('howBtn').onclick=()=>msg='Andar: SETAS ou A/D • Pular: ESPAÇO • Pegue 10 livros e chegue na placa CEPK!';
+function start(){state='play';score=0;lives=3;player.x=60;player.y=400;player.vx=player.vy=0;books.forEach(b=>b.got=false);enemies.forEach(e=>{e.x=e.min});msg='Vai, mascote CEPK!';updateHud();}
+function updateHud(){document.getElementById('score').innerText=score;document.getElementById('lives').innerText=lives;}
+
+function drawWolf(x,y,face,anim){
+ // Lobo cinza estilo mascote CEPK desenhado em canvas
+ let leg=Math.sin(anim)*6*(keys['ArrowLeft']||keys['ArrowRight']?1:0);
+ ctx.save();ctx.translate(x,y);ctx.scale(face,1);
+ // pernas
+ ctx.fillStyle='#6b6b6b';ctx.fillRect(-14,34+leg,10,16);ctx.fillRect(4,34-leg,10,16);
+ // corpo - camisa preta/verde CEPK
+ ctx.fillStyle='#111';ctx.beginPath();ctx.roundRect(-18,16,36,22,8);ctx.fill();
+ ctx.fillStyle='#00e676';ctx.fillRect(-18,24,36,5);
+ ctx.fillStyle='#fff';ctx.font='bold 7px Arial';ctx.textAlign='center';ctx.fillText('CEPK',0,33);
+ // mochila
+ ctx.fillStyle='#0a5c2e';ctx.fillRect(-24,16,8,18);
+ // braços
+ ctx.fillStyle='#8a8a8a';ctx.fillRect(-22,20+leg,8,12);ctx.fillRect(14,20-leg,8,12);
+ // cabeça
+ ctx.fillStyle='#9e9e9e';ctx.beginPath();ctx.arc(0,0,17,0,7);ctx.fill();
+ // orelhas
+ ctx.fillStyle='#9e9e9e';ctx.beginPath();ctx.moveTo(-14,-12);ctx.lineTo(-8,-24);ctx.lineTo(-3,-12);ctx.fill();
+ ctx.beginPath();ctx.moveTo(3,-12);ctx.lineTo(9,-24);ctx.lineTo(14,-12);ctx.fill();
+ ctx.fillStyle='#f8bbd0';ctx.beginPath();ctx.moveTo(-11,-13);ctx.lineTo(-8,-20);ctx.lineTo(-6,-13);ctx.fill();
+ ctx.beginPath();ctx.moveTo(6,-13);ctx.lineTo(9,-20);ctx.lineTo(11,-13);ctx.fill();
+ // focinho
+ ctx.fillStyle='#d6d6d6';ctx.beginPath();ctx.ellipse(6,5,11,7,0,0,7);ctx.fill();
+ ctx.fillStyle='#111';ctx.beginPath();ctx.arc(15,3,3.5,0,7);ctx.fill();
+ ctx.fillStyle='#111';ctx.beginPath();ctx.arc(5,-3,2.5,0,7);ctx.fill();
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(6,-4,1,0,7);ctx.fill();
+ // boca sorrindo
+ ctx.strokeStyle='#111';ctx.lineWidth=2;ctx.beginPath();ctx.arc(7,7,6,0.2,2.4);ctx.stroke();
+ // BONÉ VERDE CEPK
+ ctx.fillStyle='#00c853';ctx.beginPath();ctx.ellipse(0,-13,16,8,0,Math.PI,0);ctx.fill();
+ ctx.fillStyle='#00e676';ctx.fillRect(8,-12,14,4);
+ ctx.fillStyle='#fff';ctx.font='bold 8px Arial';ctx.fillText('CEPK',-3,-12);
+ ctx.restore();
+}
+function draw(){
+ ctx.clearRect(0,0,960,540);
+ // céu
+ let g=ctx.createLinearGradient(0,0,0,540);g.addColorStop(0,'#aee7ff');g.addColorStop(1,'#e6f7ff');ctx.fillStyle=g;ctx.fillRect(0,0,960,540);
+ // prédio verde da escola ao fundo
+ ctx.fillStyle='#7bd99a';for(let px=-camX%400;px<960;px+=400){ctx.fillRect(px,260,280,240);ctx.fillStyle='#5cb87a';ctx.fillRect(px,240,280,28);ctx.fillStyle='#fff';ctx.font='bold 18px Arial';ctx.textAlign='center';ctx.fillText('CEPK',px+140,285);ctx.fillStyle='#7bd99a';}
+ ctx.fillStyle='rgba(255,255,255,.9)';for(let i=0;i<5;i++){let cx=((i*300-camX*0.5)%1100+1100)%1100-100;ctx.beginPath();ctx.ellipse(cx,80+i*18,60,20,0,0,7);ctx.fill();}
+ // plataformas
+ platforms.forEach(p=>{ctx.fillStyle='#2e7d32';ctx.fillRect(p.x-camX,p.y,p.w,p.h);ctx.fillStyle='#69f0ae';ctx.fillRect(p.x-camX,p.y,p.w,8);});
+ // placa chegada
+ ctx.fillStyle='#111';ctx.fillRect(goal.x-camX,goal.y,50,80);ctx.fillStyle='#00e676';ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.fillText('CEPK',goal.x-camX+25,goal.y+28);ctx.fillText('CHEGADA',goal.x-camX+25,goal.y+45);
+ // livros
+ books.forEach(b=>{if(b.got)return;let yy=b.y+Math.sin(Date.now()/300+b.x)*5;ctx.fillStyle='#ffeb3b';ctx.fillRect(b.x-camX,yy,30,30);ctx.fillStyle='#d32f2f';ctx.fillRect(b.x-camX,yy,6,30);ctx.fillStyle='#111';ctx.font='10px Arial';ctx.fillText('📚',b.x-camX+15,yy+20);});
+ // inimigos = provas
+ enemies.forEach(e=>{ctx.fillStyle='#fff';ctx.fillRect(e.x-camX,e.y,36,35);ctx.fillStyle='#111';ctx.font='11px Arial';ctx.fillText('PROVA',e.x-camX+18,e.y+16);ctx.font='14px Arial';ctx.fillText('📝',e.x-camX+18,e.y+30);});
+ if(state==='play'||state==='end') drawWolf(player.x-camX+21,player.y,player.face,player.anim);
+ if(state==='menu'){
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,960,540);
+  ctx.fillStyle='#fff';ctx.textAlign='center';
+  ctx.font='900 58px Arial';ctx.fillStyle='#00e676';ctx.fillText('CEPK ADVENTURE',480,140);
+  ctx.fillStyle='#fff';ctx.font='bold 24px Arial';ctx.fillText('Colégio Estadual Presidente Kennedy',480,180);
+  drawWolf(480,300,1,0);
+  ctx.font='bold 26px Arial';ctx.fillText('Pressione ENTER ou clique em JOGAR',480,410);
+  ctx.font='18px Arial';ctx.fillText('Ajude o mascote a coletar os livros da escola!',480,445);
+ }
+ if(msg){ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(280,70,400,36);ctx.fillStyle='#fff';ctx.font='bold 16px Arial';ctx.textAlign='center';ctx.fillText(msg,480,93);}
+ if(state==='end'){ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,960,540);ctx.fillStyle='#00e676';ctx.font='900 48px Arial';ctx.textAlign='center';ctx.fillText(score>=10?'🎉 VOCÊ VENCEU! 🎉':'FIM DE JOGO',480,250);ctx.fillStyle='#fff';ctx.font='24px Arial';ctx.fillText('Livros: '+score+'  •  ENTER para jogar de novo',480,295);}
+ requestAnimationFrame(draw);
+}
+function physics(){
+ if(state!=='play')return;
+ let L=keys['ArrowLeft']||keys['a'],R=keys['ArrowRight']||keys['d'],J=keys[' ']||keys['ArrowUp']||keys['w'];
+ player.vx=L?-4.5:R?4.5:0; if(L)player.face=-1; if(R)player.face=1;
+ if(J&&player.ground){player.vy=-13;player.ground=false;}
+ player.vy+=0.6; player.x+=player.vx; player.y+=player.vy; player.anim+=0.25;
+ player.ground=false;
+ platforms.forEach(p=>{if(player.x+player.w>p.x&&player.x<p.x+p.w&&player.y+player.h>=p.y&&player.y+player.h<=p.y+18&&player.vy>=0){player.y=p.y-player.h;player.vy=0;player.ground=true;}});
+ if(player.y>600){player.y=400;player.x=60;lives--;updateHud();}
+ camX=Math.max(0,Math.min(1100,player.x-300));
+ books.forEach(b=>{if(!b.got&&Math.abs(player.x-b.x)<30&&Math.abs(player.y-b.y)<45){b.got=true;score++;updateHud();msg='Livro coletado! '+score+'/10';}});
+ enemies.forEach(e=>{e.x+=e.vx;if(e.x>e.max||e.x<e.min)e.vx*=-1;
+  if(Math.abs(player.x-e.x)<32&&Math.abs(player.y-e.y)<38){lives--;updateHud();player.x-=60;player.y-=40;msg='Opa! Você tropeçou numa prova! 📝';if(lives<=0)state='end';}});
+ if(Math.abs(player.x-goal.x)<40&&Math.abs(player.y-goal.y)<80){state='end';msg=score>=10?'🎉 PARABÉNS!':'Termine com 10 livros!';}
+ setTimeout(()=>msg='',2500);
+}
+setInterval(physics,1000/60);
+addEventListener('keydown',e=>{if(e.key==='Enter'&&state==='end')start();});
+updateHud();draw();
+</script>
+</body>
+</html>
